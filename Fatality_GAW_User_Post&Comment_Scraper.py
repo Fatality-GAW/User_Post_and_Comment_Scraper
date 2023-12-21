@@ -11,19 +11,20 @@
             SCRAPE_POST
             SAVE_DATA
     It will store the user's comments in:
-        ./UserData/Username-Comments.csv
-        ./UserData/Username-Posts.csv
+        ./UserData/Username-Comments.yyyy-MM-ddTHH.mm.ss.ms.csv
+        ./UserData/Username-Posts.yyyy-MM-ddTHH.mm.ss.ms.csv
     it may require you to install package:
         - beautifulsoup4
 
-    Notes: This script was thrown together quickly, so one assumption was:
-        -There will always be more comments than posts.  Meaning, if there's a case where user has more posts than
-        comments, then comments will be missed.
+    Notes: This script was thrown together quickly, so  assumption was:
+        - ignored if the comment is deleted
+        - just get it working then improve as needed.
 """
 
 
 import csv
 import os
+from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 
@@ -36,11 +37,12 @@ SCRAPE_POST = True                      # https://greatawakening.win/u/USERNAME_
 # Root folder to save data to:
 SAVE_DATA = "./UserData"
 # Comment and Post data CSV files for each user:
-COMMENT_DATA = f'{SAVE_DATA}/{USERNAME_TO_SCRAPE}-Comments.csv'
-POST_DATA = f'{SAVE_DATA}/{USERNAME_TO_SCRAPE}-Posts.csv'
+timenow = datetime.now().isoformat().replace(":",".")
+COMMENT_DATA = f'{SAVE_DATA}/{USERNAME_TO_SCRAPE}-Comments.{timenow}.csv'
+POST_DATA = f'{SAVE_DATA}/{USERNAME_TO_SCRAPE}-Posts.{timenow}.csv'
 
 
-# Scrape variables (DO NOT CHANGE UNLESS THE WEBSITE CHANGES!)
+# Scrape variables (DO NOT CHANGE UNLESS THE WEBSITE CHANGES!!)
 BASE_URL = 'https://GreatAwakening.win/'
 USER_SUFFIX = 'u/'
 COMMENT_SUFFIX = '/?type=comment'
@@ -48,7 +50,9 @@ POST_SUFFIX = '/?type=post'
 SORT_SUFFIX = '&sort=new'
 PAGE_SUFFIX = '&page='
 PAGE_HEAD_ERROR = "Error "
+PAGE_HEAD_USER_NOT_FOUND = "User Not Found "
 END_OF_USER_DATA = "This user has no "
+
 
 
 # This definition will check that the user supplied the required variables
@@ -82,6 +86,11 @@ def check_page(url):
         title = soup.find('head').find('title').text
         if title.startswith(PAGE_HEAD_ERROR):
             raise ValueError(f'Invalid username: {url}')
+
+        # Check if the title of the page has "User Not Found "
+        title = soup.find('head').find('title').text
+        if title.startswith(PAGE_HEAD_USER_NOT_FOUND):
+            raise ValueError(f'User not found: {url}')
 
     except ValueError as err:
         raise ValueError(err)
@@ -193,7 +202,7 @@ def scrape_user_data(username):
     global SCRAPE_POST
 
     # Gather all the Comment & Post data:
-    while True:
+    while SCRAPE_COMMENT or SCRAPE_POST:
 
         if SCRAPE_COMMENT:
             user_page_url = f'{base_user_url}{COMMENT_SUFFIX}{SORT_SUFFIX}{PAGE_SUFFIX}{page_number}'
@@ -202,9 +211,10 @@ def scrape_user_data(username):
                 for comment in scrape_comment_page(user_page_url):
                     comment_data.append(comment)
             except ValueError as e:
+                print('-'*50)
                 print(e)
+                print('-' * 50)
                 SCRAPE_COMMENT = False
-                break
 
         if SCRAPE_POST:
             user_page_url = f'{base_user_url}{POST_SUFFIX}{SORT_SUFFIX}{PAGE_SUFFIX}{page_number}'
@@ -213,7 +223,9 @@ def scrape_user_data(username):
                 for post in scrape_post_page(user_page_url):
                     post_data.append(post)
             except ValueError as e:
+                print('-' * 50)
                 print(e)
+                print('-' * 50)
                 SCRAPE_POST = False
 
         page_number += 1
